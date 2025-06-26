@@ -17,11 +17,13 @@ public:
     void EndDrawingSequence();
 
     void DrawGrid(const GridManager& grid, int current_turn, float start_x, float start_y) const;
-    void DrawEntity(const Entity& entity, float start_x, float start_y, float radius_scale, Color color, const std::string& label) const;
+    // Se pasa la fila de la entidad para determinar su rotación.
+    void DrawEntity(const Entity& entity, int entity_row, float start_x, float start_y, float radius_scale, Color color, const std::string& label) const;
     void DrawPath(const std::vector<Position>& path, float start_x, float start_y, float radius_scale, Color color) const;
     void DrawUI(int current_turn, GameState game_state) const;
 
 private:
-    void DrawPentagonCell(Vector2 center, float radius, Color color) const; // Wrapper para DrawPentagon
+    // Modificado para aceptar rotación
+    void DrawPentagonCell(Vector2 center, float radius, float rotation, Color color) const;
     // Podríamos tener aquí los colores si no están en config.h
 };

@@ -25,44 +25,35 @@ void Game::InitializeGame(const std::string& maze_filename)
     if (!grid_manager.LoadMaze(maze_filename))
     {
         std::cerr << "Error crítico: No se pudo cargar el laberinto '" << maze_filename << "'." << std::endl;
-        // Podríamos establecer un estado de error o salir, pero por ahora el juego podría no funcionar.
-        // Validar en GridManager si el laberinto es realmente jugable (ej. no vacío)
-        current_game_state = GameState::GAME_OVER; // O un nuevo estado ERROR
+        current_game_state = GameState::GAME_OVER;
         return;
     }
 
-    // Establecer posición inicial del jugador (ej. 0,0 o desde el archivo de laberinto si se define)
-    // Por ahora, asumimos que el jugador siempre empieza en (0,0) si es caminable.
-    // La lógica original tenía una comprobación: if (maze[player.row][player.col] != 0) error.
-    // Esto ahora sería:
-    if (!grid_manager.IsCellWalkable(player.GetRow(), player.GetCol(), 0, true, clone.GetPos(), clone.IsActive())) {
-        std::cerr << "Error: La posición inicial del jugador (0,0) no es transitable." << std::endl;
-        // Buscar una celda inicial alternativa o marcar error.
-        // Por ahora, para simplificar, si (0,0) no es válida, el juego no será jugable.
-        // Intentemos buscar la primera celda abierta:
-        bool found_start = false;
-        for (int r = 0; r < grid_manager.GetRows(); ++r) {
-            for (int c = 0; c < grid_manager.GetCols(); ++c) {
-                if (grid_manager.IsCellWalkable(r, c, 0, true, clone.GetPos(), clone.IsActive())) {
-                    player.Move(r,c);
-                    found_start = true;
-                    break;
-                }
+    bool found_start = false;
+    for (int r = 0; r < grid_manager.GetRows(); ++r) {
+        for (int c = 0; c < grid_manager.GetCols(); ++c) {
+            if (grid_manager.GetCellType(r,c) == static_cast<int>(CellType::PATH) ||
+                (grid_manager.GetCellType(r,c) == static_cast<int>(CellType::ALTERNATING_WALL) && (0 % 2 == 0)) ) { // Asumiendo que el turno 0 es par para ALTERNATING_WALL
+                // Considerar DYNAMIC_WALL si turns_to_open es 0 inicialmente (aunque LoadMaze las convierte a PATH)
+                player.Move(r,c);
+                found_start = true;
+                break;
             }
-            if (found_start) break;
         }
-        if (!found_start) {
-             std::cerr << "Error: No se encontró una posición inicial válida para el jugador." << std::endl;
-            current_game_state = GameState::GAME_OVER; // O un estado de error.
-            return;
-        }
+        if (found_start) break;
     }
-    
-    player.RecordMovement(); // Grabar posición inicial
+
+    if (!found_start) {
+         std::cerr << "Error: No se encontró una posición inicial válida para el jugador." << std::endl;
+        current_game_state = GameState::GAME_OVER;
+        return;
+    }
+
+    player.RecordMovement();
 
     CalculateMazeRenderOffsets();
-    current_turn = 0; // Asegurar que el turno es 0 al inicio
-    clone.SetActive(false); // Clon inactivo al inicio
+    current_turn = 0;
+    clone.SetActive(false);
     current_game_state = GameState::PLAYING;
 }
 
@@ -70,32 +61,44 @@ void Game::CalculateMazeRenderOffsets()
 {
     if (grid_manager.GetRows() == 0 || grid_manager.GetCols() == 0) return;
 
-    float total_maze_width = (grid_manager.GetCols() - 1) * PENTAGON_DX + PENTAGON_DX;
-    float total_maze_height = (grid_manager.GetRows() - 1) * PENTAGON_DY + PENTAGON_DY;
+    // Estos cálculos asumen que PENTAGON_DX es el espaciado horizontal principal
+    // y PENTAGON_DY es el espaciado vertical principal entre filas.
+    // El (grid_manager.GetCols() - 1) * PENTAGON_DX asume que DX es la distancia entre centros de columnas.
+    // El (r % 2) * (PENTAGON_DX / 2.0f) en el renderizado maneja el offset de filas impares.
+    // Así que el ancho total sería aproximadamente grid_manager.GetCols() * PENTAGON_DX si todas las filas estuvieran alineadas,
+    // o (grid_manager.GetCols() + 0.5) * PENTAGON_DX si consideramos el offset.
+    // Por simplicidad, usamos el cálculo existente, que podría necesitar ajuste visual fino más tarde.
+    float total_maze_width = (grid_manager.GetCols() - 0.5f) * PENTAGON_DX; // Aproximación considerando el offset
+    float total_maze_height = (grid_manager.GetRows() -1 ) * PENTAGON_DY + PENTAGON_RADIUS * 2; // Alto total
 
-    // El panel UI ocupa 230px a la izquierda
-    float drawable_screen_width = SCREEN_WIDTH - 230;
-    
+    float drawable_screen_width = SCREEN_WIDTH - 230; // UI panel width
+
     maze_render_start_x = 230 + (drawable_screen_width - total_maze_width) / 2.0f;
+    // Asegurar que el inicio X no sea menor que el ancho del panel UI si el laberinto es muy ancho
+    if (total_maze_width > drawable_screen_width) maze_render_start_x = 230 + PENTAGON_RADIUS;
+
+
     maze_render_start_y = (SCREEN_HEIGHT - total_maze_height) / 2.0f;
+    if (total_maze_height > SCREEN_HEIGHT) maze_render_start_y = PENTAGON_RADIUS;
+
+
 }
 
 
 void Game::Run()
 {
-    while (!WindowShouldClose() && current_game_state != GameState::GAME_OVER) // Permitir salir de GAME_OVER si se implementa reinicio
+    while (!WindowShouldClose() && current_game_state != GameState::GAME_OVER)
     {
         ProcessInput();
-        if (current_game_state == GameState::PLAYING) { // Solo actualizar si se está jugando
+        if (current_game_state == GameState::PLAYING) {
             Update();
         }
         Render();
     }
-     // Bucle post-juego para mostrar "GAME OVER" hasta que se cierre la ventana
     while (!WindowShouldClose() && current_game_state == GameState::GAME_OVER) {
-        Render(); // Solo renderizar
-         if (IsKeyPressed(KEY_R)) { // Ejemplo de reinicio
-            InitializeGame("maze.txt"); // O el último laberinto usado
+        Render();
+         if (IsKeyPressed(KEY_R)) {
+            InitializeGame("maze.txt");
         }
     }
 }
@@ -104,14 +107,74 @@ void Game::ProcessInput()
 {
     if (current_game_state == GameState::PLAYING)
     {
-        int next_player_row = player.GetRow();
-        int next_player_col = player.GetCol();
+        int current_player_row = player.GetRow();
+        int current_player_col = player.GetCol();
+        int next_player_row = current_player_row;
+        int next_player_col = current_player_col;
         bool player_attempted_move = false;
 
-        if (IsKeyPressed(KEY_UP))    { next_player_row--; player_attempted_move = true; }
-        if (IsKeyPressed(KEY_DOWN))  { next_player_row++; player_attempted_move = true; }
-        if (IsKeyPressed(KEY_LEFT))  { next_player_col--; player_attempted_move = true; }
-        if (IsKeyPressed(KEY_RIGHT)) { next_player_col++; player_attempted_move = true; }
+        // TODO: Implementar movimiento pentagonal (Q,W,E,A,D)
+        // Por ahora, mantenemos el movimiento cardinal simple y lo adaptaremos.
+        // El movimiento cardinal simple NO FUNCIONARÁ BIEN con el layout hexagonal de pentágonos.
+        // Se necesita definir cómo las teclas cardinales se mapean a los 5 vecinos.
+
+        if (IsKeyPressed(KEY_RIGHT)) {
+            // Moverse a la derecha en la misma fila
+            next_player_col++;
+            player_attempted_move = true;
+        } else if (IsKeyPressed(KEY_LEFT)) {
+            // Moverse a la izquierda en la misma fila
+            next_player_col--;
+            player_attempted_move = true;
+        } else if (IsKeyPressed(KEY_UP)) {
+            // Esto es más complicado. Depende de si la fila actual es par o impar
+            // y a cuál de los dos vecinos superiores (o uno si es el borde) se quiere mover.
+            // Para un sistema de 5 direcciones, necesitaremos teclas dedicadas (QWEAD).
+            // TEMPORALMENTE: KEY_UP podría ir al vecino superior-derecha en filas pares, superior-izquierda en filas impares.
+            next_player_row--;
+            if (current_player_row % 2 == 0) { // Fila par (punta arriba), moviendo hacia arriba
+                // next_player_col se mantiene o aumenta (para sup-der)
+            } else { // Fila impar (punta abajo), moviendo hacia arriba
+                 next_player_col--; // para sup-izq
+            }
+            player_attempted_move = true;
+
+        } else if (IsKeyPressed(KEY_DOWN)) {
+            // Similarmente complicado.
+            // TEMPORALMENTE: KEY_DOWN podría ir al vecino inferior-derecha en filas pares, inferior-izquierda en filas impares.
+            next_player_row++;
+            if (current_player_row % 2 == 0) { // Fila par (punta arriba), moviendo hacia abajo
+                // next_player_col se mantiene o aumenta (para inf-der)
+            } else { // Fila impar (punta abajo), moviendo hacia abajo
+                next_player_col--; // para inf-izq
+            }
+            player_attempted_move = true;
+        }
+
+
+        // Placeholder para nuevo input QWEAD (5 direcciones)
+        // Q: Superior-Izquierda, W: Superior, E: Superior-Derecha
+        // A: Izquierda, D: Derecha
+        // (No hay tecla directa para Inferior, Inferior-Izquierda, Inferior-Derecha en este esquema)
+        // Necesitamos un mapeo claro de 5 direcciones.
+        // Ejemplo de mapeo (asumiendo punta arriba para fila par, punta abajo para fila impar):
+        // Teclas: Arriba, Abajo, Izquierda, Derecha, (otra para la 5ta dirección)
+        // O usar Q, W, E, A, D como se sugiere en la UI.
+        //   W
+        // Q   E
+        //  A D  (esto es más para un layout de teclado)
+
+        // Movimientos para filas pares (punta arriba):
+        //  Vecino 0 (N):     r-2, c (si existe, no implementado directamente con DX, DY)
+        //  Vecino 1 (NE):    r-1, c (si r%2==0)  o  r-1, c+1 (si r%2!=0) -> (r-1, c)
+        //  Vecino 2 (SE):    r+1, c (si r%2==0)  o  r+1, c+1 (si r%2!=0) -> (r+1, c)
+        //  Vecino 3 (S):     r+2, c (no implementado directamente)
+        //  Vecino 4 (SW):    r+1, c-1 (si r%2==0) o  r+1, c (si r%2!=0)  -> (r+1, c-1)
+        //  Vecino 5 (NW):    r-1, c-1 (si r%2==0) o  r-1, c (si r%2!=0)  -> (r-1, c-1)
+        //  Lados directos: (c+1), (c-1)
+
+        // Esta sección de input necesita una reescritura completa para 5 direcciones.
+        // Por ahora, los movimientos KEY_UP/DOWN/LEFT/RIGHT son solo placeholders y probablemente incorrectos.
 
         if (player_attempted_move)
         {
@@ -119,43 +182,23 @@ void Game::ProcessInput()
             {
                 player.Move(next_player_row, next_player_col);
                 player.RecordMovement();
-                current_turn++; // El turno avanza solo si el jugador se mueve
+                current_turn++;
 
-                // Lógica de actualización post-movimiento del jugador
                 grid_manager.UpdateDynamicWalls(current_turn);
 
-                // Activar y mover clon
                 if (!clone.IsActive() && current_turn >= CLONE_ACTIVATION_TURNS) {
                     clone.SetActive(true);
-                    // El clon toma la posición inicial del jugador (movimiento 0)
-                    if (!player.GetMovementHistory().empty()) {
-                         // El clon.UpdatePositionFromHistory se encargará de esto basado en el turno.
-                         // Pero necesitamos asegurarnos que la primera vez que se active, tome la pos[0]
-                         // Si player_history[0] es la pos DESPUES del primer movimiento, y el clon debe estar en la pos inicial del jugador
-                         // entonces el clon debe tomar player_history[0] en el turno CLONE_ACTIVATION_TURNS.
-                         // La lógica de UpdatePositionFromHistory ya debería manejar esto.
-                    }
                 }
 
                 if (clone.IsActive()) {
                     clone.UpdatePositionFromHistory(player.GetMovementHistory(), current_turn);
-                    // Comprobar colisión jugador-clon DESPUÉS de que ambos se muevan
                     if (player.GetPos() == clone.GetPos()) {
-                        // El jugador se movió a la celda donde el clon acaba de aparecer.
-                        // Esto no debería pasar si IsCellWalkable del jugador lo previene.
-                        // Pero si el clon se mueve a la celda del jugador, es game over.
-                        // La lógica original: if (clone_active && next_row == clone.row && next_col == clone.col) cellIsBlocked = true;
-                        // Esto previene que el JUGADOR se mueva a la celda del clon.
-                        // ¿Qué pasa si el CLON se mueve a la celda del jugador?
-                        // "El jugador y el clon no pueden ocupar la misma celda al mismo tiempo."
-                        // Si después del movimiento del clon, P.pos == C.pos, entonces es game over.
-                         current_game_state = GameState::GAME_OVER; // O manejarlo de otra forma
+                         current_game_state = GameState::GAME_OVER;
                          std::cout << "Game Over: Colisión con el clon en el turno " << current_turn << std::endl;
-                         return; // Salir de ProcessInput para no seguir
+                         return;
                     }
                 }
 
-                // Comprobar condición de victoria
                 if (player.GetRow() == grid_manager.GetRows() - 1 && player.GetCol() == grid_manager.GetCols() - 1) {
                     current_game_state = GameState::GAME_OVER;
                     std::cout << "¡Has escapado en el turno " << current_turn << "!" << std::endl;
@@ -168,22 +211,13 @@ void Game::ProcessInput()
         show_path_solution = !show_path_solution;
     }
      if (current_game_state == GameState::GAME_OVER && IsKeyPressed(KEY_R)) {
-        InitializeGame("maze.txt"); // O el último laberinto usado
+        InitializeGame("maze.txt");
     }
 }
 
 void Game::Update()
 {
-    // La lógica de actualización principal ahora ocurre en ProcessInput después de un movimiento válido.
-    // Esto incluye:
-    // - Avance de turno
-    // - Actualización de paredes dinámicas
-    // - Activación y movimiento del clon
-    // - Comprobación de colisiones y victoria
-
-    // Si hubiera otras lógicas de actualización independientes del input del jugador, irían aquí.
-    // Por ejemplo, animaciones, efectos de partículas, etc.
-    // En este juego, el "tiempo" (turnos) solo avanza cuando el jugador se mueve.
+    // Lógica de actualización principal movida a ProcessInput post-movimiento.
 }
 
 void Game::Render()
@@ -191,21 +225,20 @@ void Game::Render()
     renderer.BeginDrawingSequence();
 
     renderer.DrawGrid(grid_manager, current_turn, maze_render_start_x, maze_render_start_y);
-    
-    renderer.DrawEntity(player, maze_render_start_x, maze_render_start_y, 0.8f, PLAYER_GREEN, "TÚ");
-    
+
+    // Pasar player.GetRow() para la rotación correcta del pentágono de la entidad
+    renderer.DrawEntity(player, player.GetRow(), maze_render_start_x, maze_render_start_y, 0.8f, PLAYER_GREEN, "TÚ");
+
     if (clone.IsActive()) {
-        renderer.DrawEntity(clone, maze_render_start_x, maze_render_start_y, 0.6f, CLONE_BLUE, "CLON");
+        // Pasar clone.GetRow() para la rotación correcta del pentágono de la entidad
+        renderer.DrawEntity(clone, clone.GetRow(), maze_render_start_x, maze_render_start_y, 0.6f, CLONE_BLUE, "CLON");
     }
 
     if (show_path_solution) {
-        // Calcular el camino solo cuando se necesita o si el grid cambia.
-        // Por ahora, lo calculamos cada vez que se muestra para simplicidad,
-        // pero podría optimizarse.
         std::vector<Position> shortest_path = grid_manager.CalculateShortestPath(
             player.GetPos(),
             {grid_manager.GetRows() - 1, grid_manager.GetCols() - 1},
-            current_turn // El cálculo del camino debe considerar el estado actual del juego
+            current_turn
         );
         if (!shortest_path.empty()) {
             renderer.DrawPath(shortest_path, maze_render_start_x, maze_render_start_y, 0.65f, PATH_SOLUTION_COLOR);
