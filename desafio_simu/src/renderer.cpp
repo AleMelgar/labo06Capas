@@ -2,6 +2,7 @@
 #include "config.h" // Para colores y constantes de pentágono
 #include <raylib.h>
 #include <cmath>   // Para cosf y sinf
+#include <cstdio>  // Para printf
 // #include "pentagon.h" // Ya no es necesario si DrawLocalPentagon está aquí
 
 namespace { // Espacio anónimo para helpers locales a este archivo
@@ -14,9 +15,13 @@ namespace { // Espacio anónimo para helpers locales a este archivo
 
 // Implementación de DrawCustomPentagon
 void Renderer::DrawCustomPentagon(Vector2 center, float width, float rect_h, float tri_h, float rotation_degrees, Color color) const {
+    // --- Código de Depuración del Rectángulo Rojo (AHORA COMENTADO/ELIMINADO) ---
+    // float debug_size = 20.0f;
+    // DrawRectangle(center.x - debug_size / 2, center.y - debug_size / 2, debug_size, debug_size, RED);
+    // --- Fin de Código de Depuración ---
+
+    // Código para calcular los vértices (ya estaba descomentado)
     // a. Calcular los 5 vértices del pentágono "punta arriba" en coordenadas locales (centro (0,0))
-    //    La punta del triángulo está en la parte negativa de Y. La base del rectángulo está en la parte positiva de Y.
-    //    El centro del pentágono (0,0 local) está en el medio de la altura del rectángulo.
     Vector2 v_local[5];
     v_local[0] = {0.0f, -(rect_h / 2.0f + tri_h)};       // Punta superior del triángulo
     v_local[1] = {width / 2.0f, -rect_h / 2.0f};         // Esquina superior derecha del rectángulo (base del triángulo)
@@ -37,6 +42,16 @@ void Renderer::DrawCustomPentagon(Vector2 center, float width, float rect_h, flo
         float rotated_y = v_local[i].x * sin_a + v_local[i].y * cos_a;
         v_final[i] = {center.x + rotated_x, center.y + rotated_y};
     }
+
+    // --- Código de Depuración para Vértices Eliminado ---
+    // if (center.x < (PENTAGON_DX * 1.5f) && center.y < (PENTAGON_DY * 1.5f)) {
+    //     printf("DrawCustomPentagon: center(%.2f, %.2f), width: %.2f, rect_h: %.2f, tri_h: %.2f, rot_deg: %.0f\n",
+    //            center.x, center.y, width, rect_h, tri_h, rotation_degrees);
+    //     for (int i = 0; i < 5; ++i) {
+    //         printf("  v_local[%d]: (%.2f, %.2f) -> v_final[%d]: (%.2f, %.2f)\n",
+    //                i, v_local[i].x, v_local[i].y, i, v_final[i].x, v_final[i].y);
+    //     }
+    // }
 
     // e. Dibujar el pentágono relleno
     // Triángulo superior (techo)
@@ -85,6 +100,13 @@ void Renderer::DrawPentagonCell(Vector2 center, float scale_factor, int row, Col
 
     // Determinar rotación para DrawCustomPentagon: 0 para punta arriba, 180 para punta abajo
     float rotation_for_custom = (row % 2 == 0) ? 0.0f : 180.0f;
+
+    // Código de Depuración Eliminado
+    // if (center.x < (PENTAGON_DX * 1.5f) && center.y < (PENTAGON_DY * 1.5f)) {
+    //     printf("DrawPentagonCell (row %d): center(%.2f, %.2f), scale_f: %.2f\n", row, center.x, center.y, scale_factor);
+    //     printf("  Calculated: cell_w: %.2f, total_h: %.2f, rect_h: %.2f, tri_h: %.2f, rot: %.0f\n",
+    //            cell_w, total_h, rect_h_part, tri_h_part, rotation_for_custom);
+    // }
 
     DrawCustomPentagon(center, cell_w, rect_h_part, tri_h_part, rotation_for_custom, color);
 
