@@ -23,7 +23,10 @@ public:
     void DrawUI(int current_turn, GameState game_state) const;
 
 private:
-    // Modificado para aceptar rotación
-    void DrawPentagonCell(Vector2 center, float radius, float rotation, Color color) const;
+    // Modificada para usar 'row' para determinar la orientación y 'scale_factor'
+    void DrawPentagonCell(Vector2 center, float scale_factor, int row, Color color) const;
     // Podríamos tener aquí los colores si no están en config.h
+
+// No es necesario duplicar private:
+    void DrawCustomPentagon(Vector2 center, float width, float rect_h, float tri_h, float rotation_degrees, Color color) const;
 };
