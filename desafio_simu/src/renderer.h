@@ -22,8 +22,25 @@ public:
     void DrawPath(const std::vector<Position>& path, float start_x, float start_y, float radius_scale, Color color) const;
     void DrawUI(int current_turn, GameState game_state) const;
 
+#include <cmath> // Para std::cos, std::sin, M_PI
+
+class Renderer
+{
+public:
+    Renderer(int screen_w, int screen_h, const std::string& window_title);
+    ~Renderer();
+
+    void BeginDrawingSequence();
+    void EndDrawingSequence();
+
+    void DrawGrid(const GridManager& grid, int current_turn, float start_x, float start_y) const;
+    // Se pasa la fila de la entidad para determinar su rotación.
+    void DrawEntity(const Entity& entity, int entity_row, float start_x, float start_y, float radius_scale, Color color, const std::string& label) const;
+    void DrawPath(const std::vector<Position>& path, float start_x, float start_y, float radius_scale, Color color) const;
+    void DrawUI(int current_turn, GameState game_state) const;
+
 private:
-    // Modificado para aceptar rotación
-    void DrawPentagonCell(Vector2 center, float radius, float rotation, Color color) const;
+    // Modificado para dibujar forma de casa y aceptar side_length y rotación en grados (0 para arriba, 180 para abajo)
+    void DrawPentagonCell(Vector2 center, float side_length, float rotation_degrees, Color fillColor, Color lineColor) const;
     // Podríamos tener aquí los colores si no están en config.h
 };
